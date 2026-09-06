@@ -27,18 +27,26 @@ from backend.app.calculators.savings import compound_savings, analyze_budget
 
 # ── Tavily web search ─────────────────────────────────────────────────────────
 
-def get_tavily_tool() -> TavilySearch:
-    if not settings.tavily_api_key:
-        logger.warning("TAVILY_API_KEY not set; web_search tool will return empty results.")
+def get_tavily_tool(api_key: str | None = None) -> TavilySearch:
+    key = api_key or settings.tavily_api_key or "no-key"
     return TavilySearch(
         max_results=settings.tavily_max_results,
-        tavily_api_key=settings.tavily_api_key or "no-key",
+        tavily_api_key=key,
         name="web_search",
         description=(
             "Search the web for current financial news, interest rates, financial advice, "
             "or explanations of financial concepts. Input should be a concise search query."
         ),
     )
+
+
+def get_chatbot_tools(tavily_key: str | None = None) -> list:
+    return [
+        get_tavily_tool(api_key=tavily_key),
+        calculate_debt_payoff,
+        calculate_savings_projection,
+        analyze_spending_budget,
+    ]
 
 
 # ── Financial data tools (synchronous — called inside async nodes via run_in_executor) ──
@@ -142,10 +150,5 @@ def analyze_spending_budget(
         return json.dumps({"error": str(exc)})
 
 
-# All tools bundled for the chatbot ReAct agent
-CHATBOT_TOOLS = [
-    get_tavily_tool(),
-    calculate_debt_payoff,
-    calculate_savings_projection,
-    analyze_spending_budget,
-]
+# Default tools (used when no per-user key is provided)
+CHATBOT_TOOLS = get_chatbot_tools()
