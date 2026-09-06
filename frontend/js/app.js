@@ -442,6 +442,7 @@ function renderGroupedTransactions(txns, monthLimit = Infinity) {
         <div class="activity-right">
           <div class="activity-amount ${isCredit ? 'credit' : 'debit'}">${isCredit ? '+' : ''}${fmtFull(t.amount)}</div>
           <div class="activity-date">${escHtml(t.date)}</div>
+          ${t.id ? `<button class="btn-delete" data-id="${escHtml(t.id)}" data-type="transactions" title="Delete">✕</button>` : ''}
         </div>`;
       feed.appendChild(el);
     }
@@ -760,12 +761,35 @@ async function loadIncomeList() {
 async function deleteItem(type, id) {
   const res = await apiFetch(`${API}/api/dashboard/${type}/${id}?user_id=${USER_ID}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete ${type}`);
-  if (type === 'debts') { await loadDebtList(); } else { await loadIncomeList(); }
+  if (type === 'debts')        { await loadDebtList(); }
+  else if (type === 'income')  { await loadIncomeList(); }
+  else if (type === 'transactions') { await loadTransactions(); }
   await loadDashboard();
-  toast(`${type === 'debts' ? 'Debt' : 'Income'} removed`, 'success');
+  const label = type === 'debts' ? 'Debt' : type === 'income' ? 'Income' : 'Transaction';
+  toast(`${label} removed`, 'success');
 }
 
 // ── Manual data entry ─────────────────────────────────────────────────────────
+
+async function addTransaction(form) {
+  const data = Object.fromEntries(new FormData(form));
+  data.amount = parseFloat(data.amount);
+  if (!data.category) delete data.category;
+  if (!data.account)  delete data.account;
+  const res = await apiFetch(`${API}/api/dashboard/transactions?user_id=${USER_ID}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || 'Failed to add transaction');
+  form.reset();
+  // Default date back to today after reset
+  const dateInput = form.querySelector('[name="txn_date"]');
+  if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+  toast('Transaction added!', 'success');
+  await loadDashboard();
+  await loadTransactions();
+}
 
 async function addDebt(form) {
   const data = Object.fromEntries(new FormData(form));
@@ -921,23 +945,55 @@ function closeDebtModal() { $('#debtModal').hidden = true; }
 // ── AI Bots ───────────────────────────────────────────────────────────────────
 
 const BOT_AGENTS = [
-  { icon: '🎯', name: 'Orchestrator',    dur: 9,  delay: 0   },
-  { icon: '🏷️', name: 'Categorizer',     dur: 14, delay: 3   },
-  { icon: '💳', name: 'Debt Analyzer',   dur: 11, delay: 6.5 },
-  { icon: '🏦', name: 'Savings Agent',   dur: 8,  delay: 9   },
-  { icon: '📊', name: 'Budget Advisor',  dur: 13, delay: 1.5 },
+  { icon: '🎯', name: 'Orchestrator',   agentKey: null,             desc: 'Run all agents — full financial analysis.', dur: 9,  delay: 0   },
+  { icon: '🏷️', name: 'Categorizer',    agentKey: 'categorizer',    desc: 'Categorise your uncategorised transactions.', dur: 14, delay: 3   },
+  { icon: '💳', name: 'Debt Analyzer',  agentKey: 'debt_analyzer',  desc: 'Calculate avalanche & snowball payoff plans.', dur: 11, delay: 6.5 },
+  { icon: '🏦', name: 'Savings Agent',  agentKey: 'savings_agent',  desc: 'Project compound savings growth over time.', dur: 8,  delay: 9   },
+  { icon: '📊', name: 'Budget Advisor', agentKey: 'budget_advisor', desc: 'Identify top spending issues and give tips.', dur: 13, delay: 1.5 },
 ];
+
+let _pendingBotAgentKey = null;
+
+function openBotModal(agent) {
+  _pendingBotAgentKey = agent.agentKey;
+  $('#botModalIcon').textContent  = agent.icon;
+  $('#botModalTitle').textContent = `Run ${agent.name}?`;
+  $('#botModalDesc').textContent  = agent.desc;
+  $('#botRunModal').hidden = false;
+}
+
+function closeBotModal() {
+  $('#botRunModal').hidden = true;
+  _pendingBotAgentKey = undefined;
+}
 
 function initBots() {
   const stage = $('#botStage');
   BOT_AGENTS.forEach(agent => {
     const bot = document.createElement('div');
     bot.className = 'bot';
-    bot.title     = agent.name;
+    bot.title     = `${agent.name} — click to run`;
     bot.textContent = agent.icon;
     bot.style.setProperty('--dur',   `${agent.dur}s`);
     bot.style.setProperty('--delay', `${agent.delay}s`);
+    bot.style.cursor = 'pointer';
+    bot.addEventListener('click', () => openBotModal(agent));
     stage.appendChild(bot);
+  });
+
+  // Bot modal buttons
+  $('#botModalCancel').addEventListener('click', closeBotModal);
+  $('#botRunModal').addEventListener('click', (e) => {
+    if (e.target === $('#botRunModal')) closeBotModal();
+  });
+  $('#botModalConfirm').addEventListener('click', () => {
+    const key = _pendingBotAgentKey;
+    closeBotModal();
+    // null key = run all; otherwise wrap in array
+    runPipeline(key !== null ? [key] : null);
+    // Scroll to pipeline output
+    $('#pipelineSection').hidden = false;
+    $('#pipelineSection').scrollIntoView({ behavior: 'smooth' });
   });
 }
 
@@ -1064,7 +1120,7 @@ function bindEvents() {
     });
   });
 
-  // Delete debt / income (event delegation)
+  // Delete debt / income / transaction (event delegation)
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.btn-delete');
     if (!btn) return;
@@ -1087,7 +1143,15 @@ function bindEvents() {
     renderGroupedTransactions(allTxns, displayedMonths);
   });
 
+  // Pre-fill today's date on transaction form
+  const txnDateInput = $('#txnForm [name="txn_date"]');
+  if (txnDateInput) txnDateInput.value = new Date().toISOString().split('T')[0];
+
   // Manual forms
+  $('#txnForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await addTransaction(e.target); } catch (err) { toast(err.message, 'error'); }
+  });
   $('#debtForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try { await addDebt(e.target); } catch (err) { toast(err.message, 'error'); }

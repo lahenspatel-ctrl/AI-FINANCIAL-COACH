@@ -39,6 +39,9 @@ class PipelineState(TypedDict):
     error: str | None
     # Optional subset of agent keys to run; None = run all
     selected_agents: list[str] | None
+    # Per-request API keys (supplied by the user via request headers)
+    openrouter_key: str | None
+    tavily_key: str | None
 
 
 class ChatState(TypedDict):

@@ -27,13 +27,12 @@ _ROLE_MAX_TOKENS: dict[str, int] = {
 }
 
 
-def get_chat_model(role: str = "chat") -> ChatOpenAI:
-    """Return a ChatOpenAI instance for the given role (primary model in chain)."""
+def get_chat_model(role: str = "chat", api_key: str | None = None) -> ChatOpenAI:
+    key = api_key or settings.openrouter_api_key or "no-key"
     chain = get_model_chain(role)
-    primary_model = chain[0]
     return ChatOpenAI(
-        model=primary_model,
-        openai_api_key=settings.openrouter_api_key or "no-key",
+        model=chain[0],
+        openai_api_key=key,
         openai_api_base=settings.openrouter_base_url,
         temperature=_ROLE_TEMPERATURE.get(role, 0.2),
         max_tokens=_ROLE_MAX_TOKENS.get(role, 512),
@@ -44,17 +43,16 @@ def get_chat_model(role: str = "chat") -> ChatOpenAI:
     )
 
 
-def get_chat_model_with_fallbacks(role: str = "chat") -> ChatOpenAI:
-    """Return a ChatOpenAI with LangChain fallback chain for reliability."""
+def get_chat_model_with_fallbacks(role: str = "chat", api_key: str | None = None) -> ChatOpenAI:
+    key = api_key or settings.openrouter_api_key or "no-key"
     chain = get_model_chain(role)
-    primary = get_chat_model(role)
+    primary = get_chat_model(role, api_key=key)
     if len(chain) <= 1:
         return primary
-
     fallbacks = [
         ChatOpenAI(
             model=m,
-            openai_api_key=settings.openrouter_api_key or "no-key",
+            openai_api_key=key,
             openai_api_base=settings.openrouter_base_url,
             temperature=_ROLE_TEMPERATURE.get(role, 0.2),
             max_tokens=_ROLE_MAX_TOKENS.get(role, 512),

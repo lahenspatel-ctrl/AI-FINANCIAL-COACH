@@ -18,6 +18,7 @@ from backend.app.schemas.finance import (
     DebtOut,
     IncomeIn,
     IncomeOut,
+    TransactionIn,
 )
 from backend.app.services.data_service import clear_user_data, get_debts, get_income, get_transactions_df
 from backend.app.services.vector_store import reset_user_data
@@ -131,6 +132,41 @@ async def list_transactions(
         }
         for t in txns
     ]
+
+
+@router.post("/transactions")
+async def add_transaction(
+    body: TransactionIn,
+    user_id: str = "demo",
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.app.db.models import Transaction as TxnModel
+    rec = TxnModel(user_id=user_id, **body.model_dump())
+    db.add(rec)
+    await db.commit()
+    await db.refresh(rec)
+    return {
+        "id": rec.id,
+        "date": str(rec.txn_date),
+        "description": rec.description,
+        "amount": rec.amount,
+        "category": rec.category,
+        "sub_category": rec.sub_category,
+    }
+
+
+@router.delete("/transactions/{txn_id}", status_code=204)
+async def delete_transaction(
+    txn_id: str,
+    user_id: str = "demo",
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        sql_delete(Transaction).where(Transaction.id == txn_id, Transaction.user_id == user_id)
+    )
+    if result.rowcount == 0:
+        raise HTTPException(404, "Transaction not found")
+    await db.commit()
 
 
 @router.get("/debts")

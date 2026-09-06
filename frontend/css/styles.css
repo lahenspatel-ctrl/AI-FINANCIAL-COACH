@@ -947,6 +947,52 @@ select.form-input { appearance: none; cursor: pointer; }
   .main-content { padding: 24px 24px; }
 }
 
+/* ── Bot Run Confirmation Modal ──────────────────────────────────────────── */
+.bot-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  padding-bottom: 80px;
+}
+[hidden].bot-modal-overlay { display: none !important; }
+
+.bot-modal-sheet {
+  background: var(--card-bg);
+  border-radius: 24px;
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.bot-modal-icon  { font-size: 44px; margin-bottom: 10px; }
+.bot-modal-title { font-size: 18px; font-weight: 800; color: var(--slate-800); margin-bottom: 8px; }
+.bot-modal-desc  { font-size: 13px; color: var(--slate-600); line-height: 1.5; margin-bottom: 20px; }
+
+.bot-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+.bot-modal-actions .btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+}
+
+[data-theme="dark"] .bot-modal-sheet { background: #111827; }
+
 /* ── Setup / Onboarding Modal ────────────────────────────────────────────── */
 .setup-overlay {
   position: fixed;
