@@ -1,0 +1,43 @@
+# Secrets — never commit
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+*.so
+
+# Data (user uploads, SQLite DB, vector store — contain personal financial data)
+data/app.db
+data/uploads/
+data/uploads-test/
+data/chroma/
+data/chroma-test/
+data/demo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Claude Code internal files
+.claude/
+
+# Misc empty files
+New.py

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinCoach AI — Personal Financial Advisor</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.0/marked.min.js"></script>
+</head>
+<body>
+  <!-- Decorative background blobs -->
+  <div class="bg-blob blob-blue"></div>
+  <div class="bg-blob blob-green"></div>
+  <div class="bg-blob blob-amber"></div>
+
+  <!-- ── Profile backdrop ── -->
+  <div class="profile-backdrop" id="profileBackdrop" hidden></div>
+
+  <!-- ── Profile Side Panel ── -->
+  <div class="profile-dropdown" id="profileDropdown" hidden>
+    <div class="profile-dropdown-inner">
+      <div class="profile-dd-header">
+        <div class="profile-dd-avatar">👤</div>
+        <div>
+          <div class="profile-dd-name">Demo User</div>
+          <div class="profile-dd-email">demo@fincoach.ai</div>
+        </div>
+        <button class="profile-dd-close" id="profileClose" aria-label="Close">✕</button>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">Account</div>
+        <div class="profile-dd-item">Profile Settings</div>
+        <div class="profile-dd-item">Notification Preferences</div>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">Security</div>
+        <div class="profile-dd-item">Change Password</div>
+        <div class="profile-dd-item">Two-Factor Authentication</div>
+        <div class="profile-dd-item">Active Sessions</div>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">Subscription</div>
+        <div class="profile-dd-item profile-dd-badge-row">
+          Free Tier <span class="badge-free">FREE</span>
+        </div>
+        <div class="profile-dd-item text-muted">Unlimited analysis with your own API keys</div>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">Linked Accounts</div>
+        <div class="profile-dd-item text-muted">No linked bank accounts</div>
+        <div class="profile-dd-item profile-dd-link">+ Connect Account</div>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">API Keys</div>
+        <div class="profile-dd-api-key-info">
+          <div class="api-key-block">
+            <div class="api-key-label">OpenRouter <span class="api-key-used-by">→ Categorizer · Debt Analyzer · Savings · Budget Advisor</span></div>
+            <div class="api-key-status" id="orKeyStatus">Not configured</div>
+            <input class="api-key-input" id="orKeyInput" type="password" placeholder="sk-or-v1-…" autocomplete="new-password" />
+          </div>
+          <div class="api-key-block">
+            <div class="api-key-label">Tavily <span class="api-key-used-by">→ AI Coach web search</span></div>
+            <div class="api-key-status" id="tvKeyStatus">Not configured</div>
+            <input class="api-key-input" id="tvKeyInput" type="password" placeholder="tvly-…" autocomplete="new-password" />
+          </div>
+          <button class="btn btn-primary" id="saveKeysBtn" style="width:100%;margin-top:4px;font-size:13px;padding:10px 14px">Save API Keys</button>
+        </div>
+      </div>
+
+      <div class="profile-dd-section">
+        <div class="profile-dd-section-title">Data</div>
+        <div class="profile-dd-item">Export Transactions (CSV)</div>
+        <div class="profile-dd-item profile-dd-link" id="profileResetLink">Reset All Data</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Debt Insights Modal ── -->
+  <div class="modal-overlay" id="debtModal" hidden>
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title">Debt Payoff Analysis</h3>
+        <button class="modal-close" id="debtModalClose">✕</button>
+      </div>
+      <div class="modal-body" id="debtModalBody">
+        <p class="modal-empty">Loading…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Currency Picker Modal ── -->
+  <div class="modal-overlay" id="currencyModal" hidden>
+    <div class="modal-sheet modal-sheet-sm">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title">Select Currency</h3>
+        <button class="modal-close" id="currencyModalClose">✕</button>
+      </div>
+      <div class="currency-grid" id="currencyGrid"></div>
+    </div>
+  </div>
+
+  <!-- ── Header ── -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="header-icon">💰</div>
+      <div class="header-titles">
+        <span class="header-brand">FinCoach AI</span>
+        <span class="header-tagline">Your personal money mentor</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="icon-btn" id="currencyToggleBtn" title="Change Currency" aria-label="Change currency">💱</button>
+      <button class="icon-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle theme">🌙</button>
+      <button class="icon-btn" id="notifBtn" title="Notifications" aria-label="Notifications">🔔</button>
+      <button class="icon-btn" id="profileBtn" title="Profile" aria-label="Profile">👤</button>
+    </div>
+  </header>
+
+  <!-- ── Main scroll area ── -->
+  <main class="main-content">
+
+    <!-- Hero / Upload Card -->
+    <section class="hero-card card">
+      <button class="currency-pill" id="currencyPill">🇺🇸 USD</button>
+      <h1 class="hero-title">Your Financial<br/>Coach, Powered by AI</h1>
+
+      <div class="hero-actions">
+        <!-- Split Analyze Button -->
+        <div class="split-btn-group">
+          <button class="btn btn-primary split-main" id="runPipelineBtn">⚡ Analyze Now</button>
+          <button class="btn btn-primary split-arrow" id="agentPickerBtn" title="Choose agents to run" aria-label="Select agents">▾</button>
+        </div>
+        <label class="btn btn-outline" id="uploadLabel">
+          📁 Upload File
+          <input type="file" id="fileInput" accept=".csv,.xlsx,.pdf,.json" hidden />
+        </label>
+      </div>
+
+      <!-- Agent picker dropdown -->
+      <div class="agent-picker" id="agentPicker" hidden>
+        <div class="agent-picker-title">Select agents to run:</div>
+        <label class="agent-picker-opt"><input type="checkbox" value="categorizer" checked> 🏷️ Categorizer</label>
+        <label class="agent-picker-opt"><input type="checkbox" value="debt_analyzer" checked> 💳 Debt Analyzer</label>
+        <label class="agent-picker-opt"><input type="checkbox" value="savings_agent" checked> 🏦 Savings Strategy</label>
+        <label class="agent-picker-opt"><input type="checkbox" value="budget_advisor" checked> 📊 Budget Advisor</label>
+        <button class="btn btn-primary" id="runSelectedBtn" style="width:100%;margin-top:10px;font-size:13px;padding:10px 14px">Run Selected Agents</button>
+      </div>
+
+      <!-- Quick upload templates -->
+      <div class="template-scroll">
+        <button class="template-btn" data-type="bank">🏦<span>Bank CSV</span></button>
+        <button class="template-btn" data-type="credit">💳<span>Credit Card</span></button>
+        <button class="template-btn" data-type="debts">📋<span>Debts JSON</span></button>
+        <button class="template-btn" data-type="income">💼<span>Income</span></button>
+      </div>
+
+      <!-- Quick stats — clickable -->
+      <div class="quick-stats" id="quickStats">
+        <div class="stat-pill stat-income" id="statPillIncome" role="button" tabindex="0" title="View Income">
+          <span class="stat-label">Income</span>
+          <span class="stat-value" id="statIncome">—</span>
+        </div>
+        <div class="stat-pill stat-expenses" id="statPillExpenses" role="button" tabindex="0" title="View Transactions">
+          <span class="stat-label">Expenses</span>
+          <span class="stat-value" id="statExpenses">—</span>
+        </div>
+        <div class="stat-pill stat-debt" id="statPillDebt" role="button" tabindex="0" title="View Debts">
+          <span class="stat-label">Debt</span>
+          <span class="stat-value" id="statDebt">—</span>
+        </div>
+        <div class="stat-pill stat-savings">
+          <span class="stat-label">Save Rate</span>
+          <span class="stat-value" id="statSavings">—</span>
+        </div>
+      </div>
+
+      <!-- Upload progress -->
+      <div class="upload-status" id="uploadStatus" hidden>
+        <div class="upload-bar-track">
+          <div class="upload-bar-fill" id="uploadBarFill"></div>
+        </div>
+        <span id="uploadStatusText">Uploading…</span>
+      </div>
+    </section>
+
+    <!-- ── Income Statement ── -->
+    <section class="section" id="incomeStatementSection" hidden>
+      <h2 class="section-title">📋 Income Statement</h2>
+      <div class="card income-statement-card" id="incomeStatementCard"></div>
+    </section>
+
+    <!-- ── Agent Pipeline Progress ── -->
+    <section class="section" id="pipelineSection" hidden>
+      <h2 class="section-title">🤖 Agent Analysis</h2>
+      <div class="agent-list" id="agentList"></div>
+    </section>
+
+    <!-- ── Charts ── -->
+    <section class="section" id="chartsSection" hidden>
+      <h2 class="section-title">📊 Spending Overview</h2>
+      <div class="charts-grid">
+        <div class="card chart-card">
+          <div class="chart-header"><span class="chart-label">BY CATEGORY</span></div>
+          <canvas id="categoryChart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <div class="chart-header"><span class="chart-label">MONTHLY TREND</span></div>
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Debt Payoff Insights (dark card) ── -->
+    <section class="section" id="debtSection" hidden>
+      <div class="card insights-card">
+        <div class="insights-header">
+          <div>
+            <span class="insights-label">DEBT PAYOFF</span>
+            <span class="insights-value" id="debtTotal">$0</span>
+          </div>
+          <button class="btn-ghost" id="viewDebtBtn">Insights →</button>
+        </div>
+        <div class="payoff-grid">
+          <div class="payoff-item active">
+            <span class="payoff-months" id="avalancheMonths">—</span>
+            <span class="payoff-strategy">Avalanche</span>
+          </div>
+          <div class="payoff-item">
+            <span class="payoff-months" id="snowballMonths">—</span>
+            <span class="payoff-strategy">Snowball</span>
+          </div>
+        </div>
+        <div class="agent-insight" id="debtInsightText"></div>
+      </div>
+    </section>
+
+    <!-- ── Transactions feed (grouped) ── -->
+    <section class="section" id="txnSection" hidden>
+      <h2 class="section-title">💳 Recent Transactions</h2>
+      <div class="activity-feed" id="activityFeed"></div>
+      <button class="btn btn-outline load-more" id="loadMoreBtn">Load more</button>
+    </section>
+
+    <!-- ── Chat Panel ── -->
+    <section class="section chat-section">
+      <h2 class="section-title">💬 Ask Your Coach</h2>
+      <div class="card chat-card">
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-msg assistant">
+            <div class="chat-avatar">🤖</div>
+            <div class="chat-bubble">
+              Hi! I'm your AI financial coach. Upload your bank statement or ask me anything about budgeting, debt payoff, or savings. I can also search the web for current financial advice!
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <input
+            type="text"
+            class="chat-input"
+            id="chatInput"
+            placeholder="Ask about your spending, debts, savings goals…"
+            autocomplete="off"
+          />
+          <button class="btn btn-primary chat-send" id="chatSend">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Manual Data Entry ── -->
+    <section class="section">
+      <h2 class="section-title">✏️ Add Data Manually</h2>
+      <div class="manual-grid">
+        <div class="card manual-card">
+          <h3 class="manual-card-title">Add Debt</h3>
+          <form id="debtForm" class="manual-form">
+            <input class="form-input" name="name" placeholder="Debt name (e.g. Visa card)" required />
+            <input class="form-input" name="balance" type="number" step="0.01" placeholder="Current balance ($)" required />
+            <input class="form-input" name="apr" type="number" step="0.1" placeholder="APR (%)" required />
+            <input class="form-input" name="minimum_payment" type="number" step="0.01" placeholder="Min payment ($)" required />
+            <button type="submit" class="btn btn-primary">Add Debt</button>
+          </form>
+        </div>
+        <div class="card manual-card">
+          <h3 class="manual-card-title">Add Income</h3>
+          <form id="incomeForm" class="manual-form">
+            <input class="form-input" name="source" placeholder="Source (e.g. Salary)" required />
+            <input class="form-input" name="monthly_amount" type="number" step="0.01" placeholder="Monthly amount ($)" required />
+            <select class="form-input" name="income_type">
+              <option value="salary">Salary</option>
+              <option value="freelance">Freelance</option>
+              <option value="rental">Rental</option>
+              <option value="investment">Investment</option>
+              <option value="other">Other</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Add Income</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Current Debts List ── -->
+    <section class="section" id="debtListSection" hidden>
+      <h2 class="section-title">💳 Your Debts</h2>
+      <div class="data-list" id="debtList"></div>
+    </section>
+
+    <!-- ── Current Income List ── -->
+    <section class="section" id="incomeListSection" hidden>
+      <h2 class="section-title">💼 Your Income</h2>
+      <div class="data-list" id="incomeList"></div>
+    </section>
+
+    <!-- ── Settings Tab ── -->
+    <section class="section" id="settingsSection" hidden>
+      <h2 class="section-title">⚙️ Settings</h2>
+      <div class="card">
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">Reset All Data</div>
+            <div class="settings-desc">Permanently delete all transactions, debts, income and chat history for this session.</div>
+          </div>
+          <button class="btn btn-danger" id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── AI Bot Stage ── -->
+  <div class="bot-stage" id="botStage" aria-hidden="true"></div>
+
+  <!-- ── Floating Bottom Nav ── -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-tab="home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" data-tab="transactions">
+      <span class="nav-icon">💳</span>
+      <span class="nav-label">Txns</span>
+    </button>
+    <button class="nav-item nav-center" data-tab="analyze">
+      <div class="nav-plus">⚡</div>
+      <span class="nav-label">Analyze</span>
+    </button>
+    <button class="nav-item" data-tab="chat">
+      <span class="nav-icon">💬</span>
+      <span class="nav-label">Coach</span>
+    </button>
+    <button class="nav-item" data-tab="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
