@@ -34,6 +34,41 @@ const CAT_EMOJI = {
 };
 const catEmoji = (cat) => CAT_EMOJI[cat] || '📦';
 
+// ── API Key Management (localStorage) ────────────────────────────────────────
+
+function getLocalKeys() {
+  return {
+    openrouter: localStorage.getItem('fc_or_key') || '',
+    tavily:     localStorage.getItem('fc_tv_key')  || '',
+  };
+}
+
+function setLocalKeys(orKey, tvKey) {
+  if (orKey) localStorage.setItem('fc_or_key', orKey);
+  if (tvKey) localStorage.setItem('fc_tv_key', tvKey);
+  localStorage.setItem('fc_keys_set', '1');
+}
+
+/**
+ * Wrapper around fetch() that automatically attaches per-user API key headers.
+ * Keys are read from localStorage and sent as custom headers.
+ * The backend extracts them per-request and never stores them server-side.
+ */
+async function apiFetch(url, opts = {}) {
+  const { openrouter, tavily } = getLocalKeys();
+  const extraHeaders = {};
+  if (openrouter) extraHeaders['X-OpenRouter-Key'] = openrouter;
+  if (tavily)     extraHeaders['X-Tavily-Key']     = tavily;
+
+  return fetch(url, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...extraHeaders,
+    },
+  });
+}
+
 // ── Currency ──────────────────────────────────────────────────────────────────
 
 const CURRENCIES = {
@@ -92,7 +127,6 @@ function openCurrencyModal() {
       localStorage.setItem('fc_currency', code);
       updateCurrencyPill();
       closeCurrencyModal();
-      // Re-render all displayed data
       loadDashboard();
       loadTransactions();
     });
@@ -120,7 +154,51 @@ let categoryChart = null;
 let trendChart    = null;
 let txnOffset     = 0;
 let currentRunId  = null;
-let lastDashData  = null;  // cached for income statement re-render
+let lastDashData  = null;
+
+// ── Setup Modal (first visit) ─────────────────────────────────────────────────
+
+function showSetupModal() {
+  const modal = $('#setupModal');
+  if (modal) modal.hidden = false;
+}
+
+function hideSetupModal() {
+  const modal = $('#setupModal');
+  if (modal) modal.hidden = true;
+}
+
+function bindSetupModal() {
+  const saveBtn = $('#setupSaveBtn');
+  const skipBtn = $('#setupSkipBtn');
+  const errEl   = $('#setupError');
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      const orKey = $('#setupOrKey').value.trim();
+      const tvKey = $('#setupTvKey').value.trim();
+
+      if (!orKey || !tvKey) {
+        errEl.textContent = 'Please enter both keys to continue, or click "Skip" to use limited mode.';
+        errEl.hidden = false;
+        return;
+      }
+
+      setLocalKeys(orKey, tvKey);
+      syncProfileKeyStatus();
+      hideSetupModal();
+      toast('API keys saved — you\'re all set!', 'success');
+    });
+  }
+
+  if (skipBtn) {
+    skipBtn.addEventListener('click', () => {
+      localStorage.setItem('fc_keys_set', '1');
+      hideSetupModal();
+      toast('Running in limited mode — add API keys in your Profile anytime.', 'info');
+    });
+  }
+}
 
 // ── On load ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +206,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   applyTheme(currentTheme);
   updateCurrencyPill();
   initBots();
+  bindSetupModal();
+
+  // Show setup modal on first visit (no keys stored yet)
+  if (!localStorage.getItem('fc_keys_set')) {
+    showSetupModal();
+  }
+
+  syncProfileKeyStatus();
 
   await Promise.all([
     loadDashboard(),
@@ -135,7 +221,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadChatHistory(),
     loadDebtList(),
     loadIncomeList(),
-    loadKeys(),
   ]);
 
   bindEvents();
@@ -145,7 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadDashboard() {
   try {
-    const res = await fetch(`${API}/api/dashboard/summary?user_id=${USER_ID}`);
+    const res = await apiFetch(`${API}/api/dashboard/summary?user_id=${USER_ID}`);
     if (!res.ok) return;
     const data = await res.json();
     lastDashData = data;
@@ -241,7 +326,6 @@ function renderIncomeStatement(data) {
   const net = (data.total_income || 0) - (data.total_expenses || 0);
   const cats = data.top_categories || [];
 
-  // Calculate other expenses not in top_categories
   const catTotal = cats.reduce((s, c) => s + c.amount, 0);
   const other = (data.total_expenses || 0) - catTotal;
 
@@ -301,7 +385,7 @@ async function loadTransactions(append = false) {
   if (!append) { txnOffset = 0; allTxns = []; displayedMonths = 3; }
 
   try {
-    const res = await fetch(`${API}/api/dashboard/transactions?user_id=${USER_ID}&limit=200&offset=${txnOffset}`);
+    const res = await apiFetch(`${API}/api/dashboard/transactions?user_id=${USER_ID}&limit=200&offset=${txnOffset}`);
     if (!res.ok) return;
     const txns = await res.json();
     if (txns.length === 0 && txnOffset === 0) return;
@@ -320,7 +404,6 @@ function renderGroupedTransactions(txns, monthLimit = Infinity) {
   const feed = $('#activityFeed');
   feed.innerHTML = '';
 
-  // Group by YYYY-MM
   const groups = {};
   for (const t of txns) {
     const key = (t.date || '').substring(0, 7);
@@ -371,7 +454,6 @@ function renderGroupedTransactions(txns, monthLimit = Infinity) {
     feed.appendChild(totalEl);
   }
 
-  // Update load-more button
   $('#loadMoreBtn').hidden = (keysToShow.length >= sortedKeys.length);
 }
 
@@ -389,7 +471,7 @@ async function uploadFile(file) {
     const fd = new FormData();
     fd.append('file', file);
     fill.style.width = '40%';
-    const res = await fetch(`${API}/api/uploads?user_id=${USER_ID}`, { method: 'POST', body: fd });
+    const res = await apiFetch(`${API}/api/uploads?user_id=${USER_ID}`, { method: 'POST', body: fd });
     fill.style.width = '70%';
     if (!res.ok) {
       const err = await res.json();
@@ -464,6 +546,15 @@ function updateAgentCard(evt) {
 }
 
 async function runPipeline(selectedAgents = null) {
+  const { openrouter, tavily } = getLocalKeys();
+  if (!openrouter || !tavily) {
+    const proceed = confirm(
+      'No API keys found. The analysis agents require an OpenRouter key.\n\n' +
+      'Click OK to add keys now, or Cancel to run in limited mode.'
+    );
+    if (proceed) { openProfile(); return; }
+  }
+
   const btn = $('#runPipelineBtn');
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing…';
@@ -472,11 +563,13 @@ async function runPipeline(selectedAgents = null) {
   $('#agentList').innerHTML = '';
 
   try {
-    const runRes = await fetch(`${API}/api/pipeline/run?user_id=${USER_ID}`, { method: 'POST' });
+    // POST includes API key headers; backend stashes them under run_id
+    const runRes = await apiFetch(`${API}/api/pipeline/run?user_id=${USER_ID}`, { method: 'POST' });
     if (!runRes.ok) throw new Error('Failed to start pipeline');
     const { id: runId } = await runRes.json();
     currentRunId = runId;
 
+    // EventSource cannot send headers — keys were stored by the POST above
     let streamUrl = `${API}/api/pipeline/stream/${runId}?user_id=${USER_ID}`;
     if (selectedAgents?.length) streamUrl += `&agents=${selectedAgents.join(',')}`;
 
@@ -517,7 +610,7 @@ async function runPipeline(selectedAgents = null) {
 
 async function loadChatHistory() {
   try {
-    const res = await fetch(`${API}/api/chat/history?user_id=${USER_ID}`);
+    const res = await apiFetch(`${API}/api/chat/history?user_id=${USER_ID}`);
     if (!res.ok) return;
     const msgs = await res.json();
     if (msgs.length === 0) return;
@@ -563,7 +656,8 @@ async function sendChat(message) {
   let fullText = '';
 
   try {
-    const res = await fetch(`${API}/api/chat/send?user_id=${USER_ID}`, {
+    // POST can carry custom headers — keys are sent here directly
+    const res = await apiFetch(`${API}/api/chat/send?user_id=${USER_ID}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: message }),
@@ -617,7 +711,7 @@ async function sendChat(message) {
 
 async function loadDebtList() {
   try {
-    const res = await fetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`);
+    const res = await apiFetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`);
     if (!res.ok) return;
     const debts = await res.json();
     const section = $('#debtListSection');
@@ -641,7 +735,7 @@ async function loadDebtList() {
 
 async function loadIncomeList() {
   try {
-    const res = await fetch(`${API}/api/dashboard/income?user_id=${USER_ID}`);
+    const res = await apiFetch(`${API}/api/dashboard/income?user_id=${USER_ID}`);
     if (!res.ok) return;
     const incomes = await res.json();
     const section = $('#incomeListSection');
@@ -664,7 +758,7 @@ async function loadIncomeList() {
 }
 
 async function deleteItem(type, id) {
-  const res = await fetch(`${API}/api/dashboard/${type}/${id}?user_id=${USER_ID}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API}/api/dashboard/${type}/${id}?user_id=${USER_ID}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete ${type}`);
   if (type === 'debts') { await loadDebtList(); } else { await loadIncomeList(); }
   await loadDashboard();
@@ -678,7 +772,7 @@ async function addDebt(form) {
   data.apr             = parseFloat(data.apr) / 100;
   data.balance         = parseFloat(data.balance);
   data.minimum_payment = parseFloat(data.minimum_payment);
-  const res = await fetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`, {
+  const res = await apiFetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -693,7 +787,7 @@ async function addDebt(form) {
 async function addIncome(form) {
   const data = Object.fromEntries(new FormData(form));
   data.monthly_amount = parseFloat(data.monthly_amount);
-  const res = await fetch(`${API}/api/dashboard/income?user_id=${USER_ID}`, {
+  const res = await apiFetch(`${API}/api/dashboard/income?user_id=${USER_ID}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -705,49 +799,49 @@ async function addIncome(form) {
   await loadIncomeList();
 }
 
-// ── API Keys ─────────────────────────────────────────────────────────────────
+// ── API Keys — Profile Panel ──────────────────────────────────────────────────
 
-async function loadKeys() {
-  try {
-    const res = await fetch(`${API}/api/settings/keys`);
-    if (!res.ok) return;
-    const data = await res.json();
+function syncProfileKeyStatus() {
+  const { openrouter, tavily } = getLocalKeys();
 
-    const orEl = $('#orKeyStatus');
-    const tvEl = $('#tvKeyStatus');
-    if (orEl) {
-      orEl.textContent  = data.openrouter.is_set ? `Configured (${data.openrouter.masked})` : 'Not configured';
-      orEl.className    = `api-key-status ${data.openrouter.is_set ? 'key-set' : 'key-unset'}`;
-    }
-    if (tvEl) {
-      tvEl.textContent = data.tavily.is_set ? `Configured (${data.tavily.masked})` : 'Not configured';
-      tvEl.className   = `api-key-status ${data.tavily.is_set ? 'key-set' : 'key-unset'}`;
-    }
-  } catch (e) { console.warn('Failed to load keys:', e); }
+  const orEl = $('#orKeyStatus');
+  const tvEl = $('#tvKeyStatus');
+
+  if (orEl) {
+    const isSet = Boolean(openrouter);
+    orEl.textContent = isSet ? `Configured (${openrouter.slice(0, 8)}…)` : 'Not configured';
+    orEl.className   = `api-key-status ${isSet ? 'key-set' : 'key-unset'}`;
+  }
+  if (tvEl) {
+    const isSet = Boolean(tavily);
+    tvEl.textContent = isSet ? `Configured (${tavily.slice(0, 8)}…)` : 'Not configured';
+    tvEl.className   = `api-key-status ${isSet ? 'key-set' : 'key-unset'}`;
+  }
 }
 
-async function saveKeys() {
+function saveProfileKeys() {
   const orKey = $('#orKeyInput')?.value.trim();
   const tvKey = $('#tvKeyInput')?.value.trim();
   if (!orKey && !tvKey) { toast('Enter at least one API key', 'error'); return; }
 
-  try {
-    const body = {};
-    if (orKey) body.openrouter_api_key = orKey;
-    if (tvKey) body.tavily_api_key     = tvKey;
+  if (orKey) localStorage.setItem('fc_or_key', orKey);
+  if (tvKey) localStorage.setItem('fc_tv_key', tvKey);
+  localStorage.setItem('fc_keys_set', '1');
 
-    const res = await fetch(`${API}/api/settings/keys`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error('Failed to save keys');
+  if ($('#orKeyInput')) $('#orKeyInput').value = '';
+  if ($('#tvKeyInput')) $('#tvKeyInput').value = '';
 
-    if ($('#orKeyInput')) $('#orKeyInput').value = '';
-    if ($('#tvKeyInput')) $('#tvKeyInput').value = '';
-    await loadKeys();
-    toast('API keys saved', 'success');
-  } catch (e) { toast(e.message, 'error'); }
+  syncProfileKeyStatus();
+  toast('API keys saved locally', 'success');
+}
+
+function clearProfileKeys() {
+  if (!confirm('Remove your saved API keys from this browser?')) return;
+  localStorage.removeItem('fc_or_key');
+  localStorage.removeItem('fc_tv_key');
+  localStorage.removeItem('fc_keys_set');
+  syncProfileKeyStatus();
+  toast('API keys cleared', 'info');
 }
 
 // ── Profile Dropdown ─────────────────────────────────────────────────────────
@@ -755,7 +849,7 @@ async function saveKeys() {
 function openProfile() {
   $('#profileDropdown').hidden  = false;
   $('#profileBackdrop').hidden  = false;
-  loadKeys();
+  syncProfileKeyStatus();
 }
 
 function closeProfile() {
@@ -771,7 +865,7 @@ async function openDebtModal() {
   body.innerHTML = '<p class="modal-empty">Loading…</p>';
 
   try {
-    const res = await fetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`);
+    const res = await apiFetch(`${API}/api/dashboard/debts?user_id=${USER_ID}`);
     const debts = await res.json();
 
     if (debts.length === 0) {
@@ -852,7 +946,7 @@ function initBots() {
 async function resetAllData() {
   if (!confirm('Delete ALL data for this session? This cannot be undone.')) return;
   try {
-    const res = await fetch(`${API}/api/dashboard/reset?user_id=${USER_ID}`, { method: 'POST' });
+    const res = await apiFetch(`${API}/api/dashboard/reset?user_id=${USER_ID}`, { method: 'POST' });
     if (!res.ok) throw new Error('Reset failed');
     toast('All data cleared', 'success');
     await Promise.all([loadDashboard(), loadTransactions(), loadDebtList(), loadIncomeList()]);
@@ -907,7 +1001,7 @@ function bindEvents() {
     localStorage.setItem('fc_theme', currentTheme);
   });
 
-  // Currency toggle (header icon + currency pill)
+  // Currency toggle
   $('#currencyToggleBtn').addEventListener('click', openCurrencyModal);
   $('#currencyPill').addEventListener('click', openCurrencyModal);
   $('#currencyModalClose').addEventListener('click', closeCurrencyModal);
@@ -919,7 +1013,7 @@ function bindEvents() {
   $('#profileBtn').addEventListener('click', openProfile);
   $('#profileClose').addEventListener('click', closeProfile);
   $('#profileBackdrop').addEventListener('click', closeProfile);
-  $('#saveKeysBtn').addEventListener('click', saveKeys);
+  $('#saveKeysBtn').addEventListener('click', saveProfileKeys);
   $('#profileResetLink').addEventListener('click', resetAllData);
 
   // Debt insights modal

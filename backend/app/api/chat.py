@@ -3,7 +3,7 @@ Chat endpoints — streaming chatbot powered by the LangGraph ReAct agent + Tavi
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ async def get_history(user_id: str = "demo", db: AsyncSession = Depends(get_db))
 @router.post("/send")
 async def send_message(
     body: ChatMessageIn,
+    request: Request,
     user_id: str = "demo",
     db: AsyncSession = Depends(get_db),
 ):
@@ -34,8 +35,17 @@ async def send_message(
       data: {"type": "tool_end", "tool": "web_search"}
       data: {"type": "done"}
     """
+    or_key = request.headers.get("X-OpenRouter-Key") or None
+    tv_key = request.headers.get("X-Tavily-Key") or None
+
     async def _generate():
-        async for chunk in run_chat(db, body.content, user_id=user_id):
+        async for chunk in run_chat(
+            db,
+            body.content,
+            user_id=user_id,
+            openrouter_key=or_key,
+            tavily_key=tv_key,
+        ):
             yield chunk
 
     return StreamingResponse(

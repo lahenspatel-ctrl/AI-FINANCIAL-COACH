@@ -22,7 +22,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.agents.events import AgentEvent
-from backend.app.agents.lg_graph import build_analysis_graph, build_chat_graph
+from backend.app.agents.lg_graph import build_analysis_graph, build_chat_graph, build_chat_graph_with_keys
 from backend.app.agents.lg_state import PipelineState
 from backend.app.db.models import AgentRun, ChatMessage, Transaction
 from backend.app.services.data_service import (
@@ -41,6 +41,8 @@ async def run_analysis_pipeline(
     run_id: str,
     user_id: str = "demo",
     selected_agents: list[str] | None = None,
+    openrouter_key: str | None = None,
+    tavily_key: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Yield raw SSE strings (data: {...}\\n\\n) as the LangGraph pipeline progresses.
@@ -99,6 +101,8 @@ async def run_analysis_pipeline(
         "budget_result": None,
         "error": None,
         "selected_agents": selected_agents,
+        "openrouter_key": openrouter_key,
+        "tavily_key": tavily_key,
     }
 
     graph = build_analysis_graph()
@@ -165,6 +169,8 @@ async def run_chat(
     db: AsyncSession,
     user_message: str,
     user_id: str = "demo",
+    openrouter_key: str | None = None,
+    tavily_key: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Yield SSE strings for the chatbot response.
@@ -220,7 +226,10 @@ async def run_chat(
             graph_messages.append(AIMessage(content=msg.content))
     graph_messages.append(HumanMessage(content=user_message))
 
-    graph = build_chat_graph()
+    if openrouter_key or tavily_key:
+        graph = build_chat_graph_with_keys(openrouter_key=openrouter_key, tavily_key=tavily_key)
+    else:
+        graph = build_chat_graph()
 
     full_response = ""
     try:

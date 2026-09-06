@@ -53,6 +53,8 @@ async def categorize_node(state: PipelineState) -> dict:
             _evt("categorizer", "progress", f"Categorizing {len(uncategorized)} transactions…")
         )
 
+        _or_key: str | None = state.get("openrouter_key") or None
+
         _SYSTEM = (
             "You are a financial transaction categorizer. Given a list of transaction "
             "descriptions and amounts, return a JSON array where each element has:\n"
@@ -82,6 +84,7 @@ async def categorize_node(state: PipelineState) -> dict:
                         {"role": "system", "content": _SYSTEM},
                         {"role": "user", "content": json.dumps(payload)},
                     ],
+                    api_key=_or_key,
                     max_tokens=512,
                 )
                 items = result if isinstance(result, list) else result.get("results", [])
@@ -127,6 +130,7 @@ async def debt_analyzer_node(state: PipelineState) -> dict:
         return {"events": [], "debt_result": None}
 
     events: list[dict] = [_evt("debt_analyzer", "started", "Analyzing debts…")]
+    _or_key: str | None = state.get("openrouter_key") or None
 
     try:
         debts = state.get("debts", [])
@@ -177,7 +181,7 @@ async def debt_analyzer_node(state: PipelineState) -> dict:
 
         events.append(_evt("debt_analyzer", "progress", "Generating plain-language explanation…"))
 
-        llm = get_chat_model_with_fallbacks("analyst")
+        llm = get_chat_model_with_fallbacks("analyst", api_key=_or_key)
         msgs = [
             SystemMessage(
                 content=(
@@ -217,6 +221,7 @@ async def savings_node(state: PipelineState) -> dict:
         return {"events": [], "savings_result": None}
 
     events: list[dict] = [_evt("savings_agent", "started", "Building savings projections…")]
+    _or_key: str | None = state.get("openrouter_key") or None
 
     try:
         income_rows = state.get("income", [])
@@ -255,7 +260,7 @@ async def savings_node(state: PipelineState) -> dict:
 
         events.append(_evt("savings_agent", "progress", "Generating savings recommendations…"))
 
-        llm = get_chat_model_with_fallbacks("analyst")
+        llm = get_chat_model_with_fallbacks("analyst", api_key=_or_key)
         msgs = [
             SystemMessage(
                 content=(
@@ -292,6 +297,7 @@ async def budget_advisor_node(state: PipelineState) -> dict:
         return {"events": [], "budget_result": None}
 
     events: list[dict] = [_evt("budget_advisor", "started", "Analyzing your budget…")]
+    _or_key: str | None = state.get("openrouter_key") or None
 
     try:
         txn_json = state.get("transactions_json", "[]")
@@ -328,7 +334,7 @@ async def budget_advisor_node(state: PipelineState) -> dict:
 
         events.append(_evt("budget_advisor", "progress", "Generating budget recommendations…"))
 
-        llm = get_chat_model_with_fallbacks("analyst")
+        llm = get_chat_model_with_fallbacks("analyst", api_key=_or_key)
         msgs = [
             SystemMessage(
                 content=(

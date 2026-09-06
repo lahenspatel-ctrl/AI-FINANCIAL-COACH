@@ -24,7 +24,7 @@ from backend.app.agents.lg_nodes import (
     should_continue,
 )
 from backend.app.agents.lg_state import ChatState, PipelineState
-from backend.app.agents.lg_tools import CHATBOT_TOOLS
+from backend.app.agents.lg_tools import CHATBOT_TOOLS, get_chatbot_tools
 
 
 # ── Analysis pipeline graph ───────────────────────────────────────────────────
@@ -83,11 +83,26 @@ Rules:
 
 @lru_cache(maxsize=1)
 def build_chat_graph():
-    """Compile and cache the chatbot ReAct agent graph."""
+    """Compile and cache the chatbot ReAct agent graph (uses server-side keys)."""
     llm = get_chat_model_with_fallbacks("chat")
     return create_react_agent(
         model=llm,
         tools=CHATBOT_TOOLS,
+        state_schema=ChatState,
+        prompt=SystemMessage(content=_CHATBOT_SYSTEM),
+    )
+
+
+def build_chat_graph_with_keys(
+    openrouter_key: str | None = None,
+    tavily_key: str | None = None,
+):
+    """Build a fresh (non-cached) chat graph using per-user API keys."""
+    llm = get_chat_model_with_fallbacks("chat", api_key=openrouter_key)
+    tools = get_chatbot_tools(tavily_key=tavily_key)
+    return create_react_agent(
+        model=llm,
+        tools=tools,
         state_schema=ChatState,
         prompt=SystemMessage(content=_CHATBOT_SYSTEM),
     )

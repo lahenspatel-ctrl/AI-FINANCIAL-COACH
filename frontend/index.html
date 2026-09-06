@@ -14,6 +14,34 @@
   <div class="bg-blob blob-green"></div>
   <div class="bg-blob blob-amber"></div>
 
+  <!-- ── API Key Setup Modal (shown on first visit) ── -->
+  <div class="setup-overlay" id="setupModal" hidden>
+    <div class="setup-sheet">
+      <div class="setup-logo">💰</div>
+      <h2 class="setup-title">Welcome to FinCoach AI</h2>
+      <p class="setup-sub">Enter your API keys to get started. Keys are stored only in your browser — they are never sent to our servers except during analysis.</p>
+
+      <div class="setup-field">
+        <label class="setup-label" for="setupOrKey">OpenRouter API Key <span class="setup-required">*</span></label>
+        <div class="setup-key-hint">Used for: Categorizer · Debt Analyzer · Savings · Budget AI Coach</div>
+        <input class="setup-input" id="setupOrKey" type="password" placeholder="sk-or-v1-…" autocomplete="new-password" />
+        <a class="setup-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free key at openrouter.ai →</a>
+      </div>
+
+      <div class="setup-field">
+        <label class="setup-label" for="setupTvKey">Tavily API Key <span class="setup-required">*</span></label>
+        <div class="setup-key-hint">Used for: AI Coach web search (current rates, financial news)</div>
+        <input class="setup-input" id="setupTvKey" type="password" placeholder="tvly-…" autocomplete="new-password" />
+        <a class="setup-link" href="https://app.tavily.com" target="_blank" rel="noopener">Get a free key at tavily.com →</a>
+      </div>
+
+      <div class="setup-error" id="setupError" hidden></div>
+
+      <button class="btn btn-primary setup-cta" id="setupSaveBtn">Get Started →</button>
+      <button class="setup-skip" id="setupSkipBtn">Skip for now (limited functionality)</button>
+    </div>
+  </div>
+
   <!-- ── Profile backdrop ── -->
   <div class="profile-backdrop" id="profileBackdrop" hidden></div>
 
